@@ -1,0 +1,19 @@
+# Bun configuration for lc-platform-dev-cli
+
+[install]
+# Use exact versions for reproducible builds
+exact = true
+
+[install.scopes]
+# Configure GitHub Packages for @stainedhead scope
+"@stainedhead" = { url = "https://npm.pkg.github.com", token = "$BUN_AUTH_TOKEN" }
+
+[test]
+# Test configuration
+coverage = true
+coverageDir = "coverage"
+coverageReporter = ["text", "lcov"]
+
+[run]
+# Silence experimental warnings
+silent = false

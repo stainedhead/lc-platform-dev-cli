@@ -1,0 +1,78 @@
+{
+  "name": "@stainedhead/lc-platform-dev-cli",
+  "version": "0.1.0",
+  "description": "CLI tool for LC Platform - local developer tooling for cloud-agnostic application management",
+  "type": "module",
+  "bin": {
+    "lcp": "./dist/cli/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun build ./src/cli/index.ts --outdir ./dist/cli --target bun && tsc --emitDeclarationOnly",
+    "build:types": "tsc --emitDeclarationOnly",
+    "dev": "bun run --watch src/cli/index.ts",
+    "start": "bun run dist/cli/index.js",
+    "test": "bun test",
+    "test:unit": "bun test tests/unit",
+    "test:integration": "bun test tests/integration",
+    "test:e2e": "bun test tests/e2e",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist coverage",
+    "prepublishOnly": "bun run clean && bun run build"
+  },
+  "dependencies": {
+    "@stainedhead/lc-platform-dev-accelerators": "file:../lc-platform-dev-accelerators",
+    "commander": "^12.1.0",
+    "chalk": "^5.3.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.14",
+    "@types/node": "^22.10.2",
+    "@typescript-eslint/eslint-plugin": "^8.18.1",
+    "@typescript-eslint/parser": "^8.18.1",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.2.1",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stainedhead/lc-platform-dev-cli.git"
+  },
+  "keywords": [
+    "cli",
+    "cloud",
+    "aws",
+    "azure",
+    "platform",
+    "devtools",
+    "clean-architecture",
+    "hexagonal-architecture"
+  ],
+  "author": "stainedhead",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/stainedhead/lc-platform-dev-cli/issues"
+  },
+  "homepage": "https://github.com/stainedhead/lc-platform-dev-cli#readme",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}
