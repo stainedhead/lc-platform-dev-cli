@@ -32,6 +32,7 @@
   },
   "dependencies": {
     "@stainedhead/lc-platform-dev-accelerators": "file:../lc-platform-dev-accelerators",
+    "@stainedhead/lc-platform-processing-lib": "file:../lc-platform-processing-lib",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
     "ora": "9.0.0",
