@@ -4,7 +4,12 @@
 
 ## Overview
 
-The LC Platform Dev CLI (`lcp`) is a command-line tool that provides local developer tooling for managing cloud-agnostic applications. It serves as a thin presentation layer over the `@stainedhead/lc-platform-dev-accelerators` core library, following Clean Architecture principles.
+The LC Platform Dev CLI (`lcp`) is a command-line tool that provides local developer tooling for managing cloud-agnostic applications. It serves as a thin presentation layer (adapter/interface) over two core libraries, strictly following Clean Architecture principles:
+
+- **`@stainedhead/lc-platform-processing-lib`**: Core platform processing logic, business rules, and domain entities
+- **`@stainedhead/lc-platform-dev-accelerators`**: Cloud provider abstractions and infrastructure operations
+
+This separation ensures the CLI contains zero business logic, acting purely as an adapter that translates user commands into domain operations.
 
 ## Purpose
 
@@ -55,7 +60,19 @@ Enable developers to manage application lifecycle, configuration, and deployment
 
 ## Architecture Principles
 
-1. **No Direct Cloud SDK Calls**: All cloud operations delegated to core library
+### Clean Architecture Compliance
+
+The CLI strictly adheres to Clean Architecture (Hexagonal Architecture) principles:
+
+1. **Dependency Rule**: CLI depends on core libraries, never the reverse
+2. **No Business Logic in CLI**: All domain logic lives in `lc-platform-processing-lib`
+3. **Pure Adapter Layer**: CLI translates between user commands and domain use cases
+4. **Infrastructure Isolation**: Cloud operations isolated in `lc-platform-dev-accelerators`
+5. **Testability**: Core libraries tested independently of CLI; CLI tests use mocks
+
+### Development Principles
+
+1. **No Direct Cloud SDK Calls**: All cloud operations delegated to accelerators library
 2. **Test-First Development**: TDD with 80% minimum coverage
 3. **YAGNI Compliance**: Only requested features, no speculative additions
 4. **CLI-First Interface**: All functionality accessible via command line
@@ -104,5 +121,7 @@ Enable developers to manage application lifecycle, configuration, and deployment
 ## Related Resources
 
 - **Source Code**: [GitHub Repository](https://github.com/stainedhead/lc-platform-dev-cli)
-- **Core Library**: [@stainedhead/lc-platform-dev-accelerators](https://github.com/stainedhead/lc-platform-dev-accelerators)
+- **Core Libraries**:
+  - **Processing Library**: [@stainedhead/lc-platform-processing-lib](https://github.com/stainedhead/lc-platform-processing-lib) - Domain logic and business rules
+  - **Accelerators Library**: [@stainedhead/lc-platform-dev-accelerators](https://github.com/stainedhead/lc-platform-dev-accelerators) - Cloud provider abstractions
 - **Documentation**: See `/documentation` directory for detailed guides

@@ -17,46 +17,74 @@
 
 ### Clean Architecture Principles
 
-The CLI follows Clean Architecture with strict layer separation:
+The CLI strictly follows Clean Architecture (Hexagonal Architecture) with clear layer separation and the Dependency Rule:
 
 ```
-┌─────────────────────────────────────────┐
-│  Presentation Layer (CLI)               │
-│  - Argument parsing (Commander.js)      │
-│  - Output formatting                    │
-│  - User interaction                     │
-│  - Exit code management                 │
-└─────────────┬───────────────────────────┘
-              │ imports & delegates
+┌───────────────────────────────────────────────────────────────┐
+│  Presentation Layer (CLI - This Project)                      │
+│  - Argument parsing (Commander.js)                            │
+│  - Output formatting (human-readable, JSON)                   │
+│  - User interaction & error messages                          │
+│  - Exit code management                                       │
+│  - NO BUSINESS LOGIC                                          │
+└─────────────┬─────────────────────────────────────────────────┘
+              │ imports & delegates to
+              │ (Dependency Rule: outer → inner)
               ▼
-┌─────────────────────────────────────────┐
-│  Core Library                           │
-│  @stainedhead/lc-platform-dev-          │
-│  accelerators                           │
-│  - All business logic                   │
-│  - All cloud operations                 │
-│  - Provider-agnostic interfaces         │
-└─────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│  Application/Domain Layer (Processing Library)                │
+│  @stainedhead/lc-platform-processing-lib                      │
+│  - Business rules & domain entities                           │
+│  - Use cases & application services                           │
+│  - Platform processing logic                                  │
+│  - NO INFRASTRUCTURE CONCERNS                                 │
+└─────────────┬─────────────────────────────────────────────────┘
+              │ uses abstractions from
+              │ (Dependency Inversion)
+              ▼
+┌───────────────────────────────────────────────────────────────┐
+│  Infrastructure Layer (Accelerators Library)                  │
+│  @stainedhead/lc-platform-dev-accelerators                    │
+│  - Cloud provider implementations (AWS, Azure, Mock)          │
+│  - External service adapters                                  │
+│  - Infrastructure-specific code                               │
+│  - Implements interfaces defined by domain layer              │
+└───────────────────────────────────────────────────────────────┘
 ```
 
-**Critical Rule**: The CLI NEVER makes direct cloud SDK calls. All cloud operations flow through the core library.
+**Critical Rules**:
+1. CLI NEVER contains business logic - only adapts user input to domain operations
+2. CLI NEVER makes direct cloud SDK calls - all infrastructure via accelerators library
+3. Processing library defines interfaces; accelerators library implements them
+4. Dependencies always point inward: CLI → Processing → Accelerators (never reversed)
+5. Domain layer (processing lib) has no knowledge of CLI or infrastructure specifics
 
 ### Layer Responsibilities
 
-**CLI Layer (This Project)**:
-- Parse command-line arguments
+**CLI Layer (This Project)** - Pure Adapter/Interface:
+- Parse command-line arguments and flags
 - Load and merge configuration files
-- Validate required context values
-- Format output (human-readable or JSON)
-- Handle user errors with helpful messages
-- Manage exit codes
+- Validate required context values (structural validation only)
+- Translate user commands into domain use case calls
+- Format domain responses for user consumption
+- Map domain errors to appropriate exit codes
+- **FORBIDDEN**: Business logic, domain rules, cloud operations
 
-**Core Library** (External Dependency):
-- Execute cloud operations
-- Manage provider-specific implementations
-- Handle retries and error recovery
-- Maintain cloud resource state
+**Processing Library** (External Dependency) - Domain/Application:
+- Define domain entities and business rules
+- Implement use cases (application services)
+- Coordinate business workflows
+- Define interfaces for infrastructure needs
+- Domain-level validation and error handling
+- **FORBIDDEN**: CLI concerns, cloud SDK calls, infrastructure details
+
+**Accelerators Library** (External Dependency) - Infrastructure:
+- Implement cloud provider operations (AWS, Azure, Mock)
+- Handle provider-specific APIs and SDKs
+- Implement interfaces defined by processing library
+- Manage retries, error recovery, and resilience
 - Abstract provider differences
+- **FORBIDDEN**: Business logic, domain rules
 
 ### Configuration Architecture
 
@@ -100,11 +128,20 @@ renameSync(tempPath, targetPath); // Atomic operation
 
 ```json
 {
-  "commander": "^12.1.0",      // CLI framework
-  "zod": "^3.24.1",            // Schema validation
-  "@stainedhead/lc-platform-dev-accelerators": "workspace:*"
+  "commander": "^12.1.0",      // CLI framework for argument parsing
+  "zod": "4.2.1",              // Schema validation
+  "chalk": "^5.3.0",           // Terminal colors and formatting
+  "ora": "9.0.0",              // Terminal spinners
+
+  // Clean Architecture Core Libraries
+  "@stainedhead/lc-platform-processing-lib": "file:../lc-platform-processing-lib",
+  "@stainedhead/lc-platform-dev-accelerators": "file:../lc-platform-dev-accelerators"
 }
 ```
+
+**Library Roles**:
+- **processing-lib**: Domain logic, business rules, use cases (application layer)
+- **dev-accelerators**: Cloud provider implementations, infrastructure adapters (infrastructure layer)
 
 ### Development Dependencies
 

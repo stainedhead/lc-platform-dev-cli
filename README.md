@@ -9,7 +9,12 @@
 
 ## Overview
 
-**lc-platform-dev-cli** (`lcp`) is a CLI tool that wraps the `@stainedhead/lc-platform-dev-accelerators` library, providing local developer tooling for managing cloud-agnostic applications using Clean Architecture principles.
+**lc-platform-dev-cli** (`lcp`) is a CLI tool that provides local developer tooling for managing cloud-agnostic applications. It follows Clean Architecture principles as a pure presentation layer (adapter) over two core libraries:
+
+- **`@stainedhead/lc-platform-processing-lib`**: Domain logic, business rules, and use cases
+- **`@stainedhead/lc-platform-dev-accelerators`**: Cloud provider implementations and infrastructure
+
+The CLI contains zero business logic, acting purely as an adapter that translates user commands into domain operations.
 
 ### Key Features
 
@@ -318,26 +323,42 @@ tests/
 
 ## Architecture
 
-This CLI is a **thin presentation layer** over the `@stainedhead/lc-platform-dev-accelerators` library:
+This CLI strictly follows **Clean Architecture (Hexagonal Architecture)** as a pure presentation layer:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    lcp CLI (This Project)                   │
-│  - Argument parsing (Commander.js)                          │
-│  - Output formatting (JSON/human-readable)                  │
-│  - Configuration management                                 │
-│  - Exit code management                                     │
-└─────────────────────────┬───────────────────────────────────┘
-                          │ imports (future integration)
-┌─────────────────────────▼───────────────────────────────────┐
-│        @stainedhead/lc-platform-dev-accelerators            │
-│  - LCPlatform (Control Plane - infrastructure management)   │
-│  - LCAppRuntime (Data Plane - runtime operations)           │
-│  - Provider implementations (AWS, Mock, future: Azure)      │
-└─────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│  Presentation Layer (This Project - lcp CLI)                  │
+│  - Argument parsing (Commander.js)                            │
+│  - Output formatting (JSON/human-readable)                    │
+│  - Configuration management                                   │
+│  - Exit code management                                       │
+│  - NO BUSINESS LOGIC                                          │
+└─────────────┬─────────────────────────────────────────────────┘
+              │ delegates to (Dependency Rule: outer → inner)
+              ▼
+┌───────────────────────────────────────────────────────────────┐
+│  Application/Domain Layer (Processing Library)                │
+│  @stainedhead/lc-platform-processing-lib                      │
+│  - Business rules & domain entities                           │
+│  - Use cases & application services                           │
+│  - Platform processing logic                                  │
+└─────────────┬─────────────────────────────────────────────────┘
+              │ uses abstractions from (Dependency Inversion)
+              ▼
+┌───────────────────────────────────────────────────────────────┐
+│  Infrastructure Layer (Accelerators Library)                  │
+│  @stainedhead/lc-platform-dev-accelerators                    │
+│  - Cloud provider implementations (AWS, Azure, Mock)          │
+│  - External service adapters                                  │
+│  - Infrastructure-specific code                               │
+└───────────────────────────────────────────────────────────────┘
 ```
 
-**Critical Rule**: The CLI never makes direct cloud SDK calls. All cloud operations flow through the core library.
+**Critical Rules**:
+1. **No Business Logic in CLI**: All domain logic lives in processing library
+2. **No Direct Cloud Calls**: All infrastructure operations via accelerators library
+3. **Dependency Rule**: Dependencies always point inward (CLI → Processing → Accelerators)
+4. **Dependency Inversion**: Processing library defines interfaces; accelerators implements them
 
 ## Testing
 
@@ -418,4 +439,5 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Related Projects
 
-- **[@stainedhead/lc-platform-dev-accelerators](https://github.com/stainedhead/lc-platform-dev-accelerators)** - Core platform library
+- **[@stainedhead/lc-platform-processing-lib](https://github.com/stainedhead/lc-platform-processing-lib)** - Domain logic and business rules (Application/Domain Layer)
+- **[@stainedhead/lc-platform-dev-accelerators](https://github.com/stainedhead/lc-platform-dev-accelerators)** - Cloud provider abstractions (Infrastructure Layer)
