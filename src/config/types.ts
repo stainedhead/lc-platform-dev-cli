@@ -8,7 +8,37 @@
 export type ProviderName = 'aws' | 'azure' | 'mock';
 
 /**
- * Configuration profile settings
+ * CLI Context Configuration
+ * Persistent configuration stored in ~/.lcp/config.json (global) and .lcp/config.json (project-local)
+ * All fields are optional to allow partial configuration
+ */
+export interface CliContext {
+  /** Cloud provider account identifier */
+  account?: string;
+
+  /** Team or organization identifier */
+  team?: string;
+
+  /** Application moniker (unique identifier) */
+  moniker?: string;
+
+  /** Cloud provider selection */
+  provider?: ProviderName;
+
+  /** Cloud provider region */
+  region?: string;
+}
+
+/**
+ * Configuration file locations
+ */
+export const CONFIG_PATHS = {
+  GLOBAL: '~/.lcp/config.json',
+  PROJECT_LOCAL: '.lcp/config.json',
+} as const;
+
+/**
+ * Configuration profile settings (legacy - kept for backwards compatibility)
  */
 export interface ProfileConfig {
   provider?: ProviderName;
@@ -17,7 +47,7 @@ export interface ProfileConfig {
 }
 
 /**
- * Main CLI configuration structure
+ * Main CLI configuration structure (legacy - kept for backwards compatibility)
  * Stored at ~/.lcp/config.json
  */
 export interface CLIConfig {

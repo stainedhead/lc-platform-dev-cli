@@ -1,0 +1,105 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lc-platform.dev/schemas/app-config.json",
+  "title": "Application Configuration",
+  "description": "Schema for application and version configuration files used with lcp app and lcp version commands. Note: This is a placeholder schema - actual application configuration structure is defined by the platform.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Application or version name",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description"
+    },
+    "environment": {
+      "type": "object",
+      "description": "Environment variables",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "resources": {
+      "type": "object",
+      "description": "Resource requirements and configuration",
+      "properties": {
+        "compute": {
+          "type": "object",
+          "properties": {
+            "memory": {
+              "type": "string",
+              "pattern": "^[0-9]+(Mi|Gi)$",
+              "examples": ["512Mi", "2Gi"]
+            },
+            "cpu": {
+              "type": "string",
+              "pattern": "^[0-9]+(m)?$",
+              "examples": ["500m", "2"]
+            }
+          }
+        },
+        "storage": {
+          "type": "object",
+          "properties": {
+            "size": {
+              "type": "string",
+              "pattern": "^[0-9]+(Gi|Ti)$",
+              "examples": ["10Gi", "1Ti"]
+            }
+          }
+        }
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "description": "List of required dependencies",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Dependency name"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["database", "cache", "queue", "storage"],
+            "description": "Dependency type"
+          },
+          "version": {
+            "type": "string",
+            "description": "Dependency version"
+          }
+        },
+        "required": ["name", "type"]
+      }
+    }
+  },
+  "required": ["name"],
+  "additionalProperties": true,
+  "examples": [
+    {
+      "name": "api-service",
+      "description": "REST API backend service",
+      "environment": {
+        "LOG_LEVEL": "info",
+        "PORT": "8080"
+      },
+      "resources": {
+        "compute": {
+          "memory": "1Gi",
+          "cpu": "500m"
+        }
+      },
+      "dependencies": [
+        {
+          "name": "postgres",
+          "type": "database",
+          "version": "14"
+        }
+      ]
+    }
+  ],
+  "note": "This is a placeholder schema. The actual application configuration schema is defined by the @stainedhead/lc-platform-dev-accelerators core library and platform implementation."
+}

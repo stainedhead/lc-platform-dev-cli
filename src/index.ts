@@ -11,8 +11,21 @@ export {
   type ProfileConfig,
   type ResolvedConfig,
   type ProviderName,
+  type CliContext,
 } from './config/types.js';
-export { getConfig, getConfigPath, configFileExists } from './config/loader.js';
+export {
+  loadConfig,
+  loadConfigWithOptions,
+  getGlobalConfigPath,
+  globalConfigExists,
+  projectLocalConfigExists,
+} from './config/loader.js';
+export {
+  writeGlobalConfig,
+  writeProjectLocalConfig,
+  clearGlobalConfig,
+  clearProjectLocalConfig,
+} from './config/writer.js';
 
 // Error handling
 export { CLIError, ExitCode, handleError } from './utils/errors.js';

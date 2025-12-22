@@ -1,140 +1,160 @@
 /**
- * Configuration loader
+ * Configuration loader with global + project-local merge support
  *
- * Loads and merges configuration from multiple sources:
- * 1. Built-in defaults
- * 2. Config file (~/.lcp/config.json)
- * 3. Environment variables
- * 4. Command-line flags
+ * Load priority (highest to lowest):
+ * 1. Command-line flags
+ * 2. Project-local config (.lcp/config.json in current or parent directory)
+ * 3. Global config (~/.lcp/config.json)
+ * 4. Empty defaults (all fields optional)
  */
 
 import { readFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
-import type { GlobalOptions } from '../cli/options.js';
-import { type CLIConfig, type ResolvedConfig, type ProviderName, DEFAULT_CONFIG } from './types.js';
-
-const CONFIG_DIR = join(homedir(), '.lcp');
-const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
+import { join, dirname } from 'node:path';
+import type { CliContext } from './types.js';
+import { safeValidateCliContext } from './schema.js';
 
 /**
- * Load configuration from file
+ * Get global config file path
+ * Respects HOME environment variable for testability
  */
-function loadConfigFile(path: string = CONFIG_FILE): CLIConfig {
-  const configPath = process.env['LCP_CONFIG_PATH'] ?? path;
+export function getGlobalConfigPath(): string {
+  const home = process.env['HOME'] || process.env['USERPROFILE'] || homedir();
+  return join(home, '.lcp', 'config.json');
+}
 
-  if (!existsSync(configPath)) {
+/**
+ * Find project-local config file by walking up the directory tree
+ * Returns the path to .lcp/config.json if found, otherwise null
+ */
+export function findProjectLocalConfig(startDir: string = process.cwd()): string | null {
+  let currentDir = startDir;
+
+  while (true) {
+    const configPath = join(currentDir, '.lcp', 'config.json');
+    if (existsSync(configPath)) {
+      return configPath;
+    }
+
+    // Move up one directory
+    const parentDir = dirname(currentDir);
+    if (parentDir === currentDir) {
+      // Reached root
+      break;
+    }
+    currentDir = parentDir;
+  }
+
+  return null;
+}
+
+/**
+ * Load config file from path with validation
+ * Returns empty object if file doesn't exist or is invalid
+ */
+function loadConfigFile(path: string): CliContext {
+  if (!existsSync(path)) {
     return {};
   }
 
   try {
-    const content = readFileSync(configPath, 'utf-8');
-    return JSON.parse(content) as CLIConfig;
-  } catch {
-    // If config file is invalid, return empty config
+    const content = readFileSync(path, 'utf-8');
+    const data = JSON.parse(content);
+
+    // Validate the config data
+    const result = safeValidateCliContext(data);
+    if (result.success) {
+      return result.data;
+    }
+
+    // If validation fails, log warning and return empty config
+    console.warn(`Warning: Invalid config file at ${path}. Using empty config.`);
+    return {};
+  } catch (error) {
+    // If file read or JSON parse fails, return empty config
+    console.warn(`Warning: Failed to load config file at ${path}. ${(error as Error).message}`);
     return {};
   }
 }
 
 /**
- * Get configuration from environment variables
+ * Deep merge two config objects
+ * Project-local values override global values
+ * Arrays are replaced, not merged
+ * Null values delete the key
  */
-function getEnvConfig(): Partial<ResolvedConfig> {
-  const config: Partial<ResolvedConfig> = {};
+export function mergeConfigs(global: CliContext, local: CliContext): CliContext {
+  const result: CliContext = { ...global };
 
-  const provider = process.env['LCP_PROVIDER'];
-  if (provider && isValidProvider(provider)) {
-    config.provider = provider;
-  }
+  for (const key in local) {
+    const localValue = local[key as keyof CliContext];
 
-  const region = process.env['LCP_REGION'];
-  if (region) {
-    config.region = region;
-  }
-
-  return config;
-}
-
-/**
- * Validate provider name
- */
-function isValidProvider(provider: string): provider is ProviderName {
-  return ['aws', 'azure', 'mock'].includes(provider);
-}
-
-/**
- * Get resolved configuration by merging all sources
- *
- * Priority (highest to lowest):
- * 1. Command-line options
- * 2. Environment variables
- * 3. Profile settings from config file
- * 4. Default profile settings
- * 5. Built-in defaults
- */
-export function getConfig(options?: GlobalOptions): ResolvedConfig {
-  // Start with defaults
-  const config: ResolvedConfig = { ...DEFAULT_CONFIG };
-
-  // Load config file
-  const fileConfig = loadConfigFile();
-
-  // Apply default settings from file
-  if (fileConfig.defaultProvider && isValidProvider(fileConfig.defaultProvider)) {
-    config.provider = fileConfig.defaultProvider;
-  }
-  if (fileConfig.defaultRegion) {
-    config.region = fileConfig.defaultRegion;
-  }
-  if (fileConfig.options) {
-    config.options = { ...config.options, ...fileConfig.options };
-  }
-
-  // Apply profile settings if specified
-  const profileName = options?.profile ?? process.env['LCP_PROFILE'];
-  if (profileName && fileConfig.profiles?.[profileName]) {
-    const profile = fileConfig.profiles[profileName];
-    if (profile.provider && isValidProvider(profile.provider)) {
-      config.provider = profile.provider;
+    if (localValue === undefined) {
+      continue; // Skip undefined values
     }
-    if (profile.region) {
-      config.region = profile.region;
+
+    if (localValue === null) {
+      // Null means delete the key
+      delete result[key as keyof CliContext];
+      continue;
     }
-    if (profile.options) {
-      config.options = { ...config.options, ...profile.options };
-    }
+
+    // For primitive values and arrays, replace
+    // At this point, localValue is not undefined or null
+    // Both configs are already validated, so we can safely cast
+    const typedKey = key as keyof CliContext;
+    (result as Record<string, unknown>)[typedKey] = localValue;
   }
 
-  // Apply environment variables
-  const envConfig = getEnvConfig();
-  if (envConfig.provider) {
-    config.provider = envConfig.provider;
-  }
-  if (envConfig.region) {
-    config.region = envConfig.region;
-  }
-
-  // Apply command-line options (highest priority)
-  if (options?.provider && isValidProvider(options.provider)) {
-    config.provider = options.provider;
-  }
-  if (options?.region) {
-    config.region = options.region;
-  }
-
-  return config;
+  return result;
 }
 
 /**
- * Get the configuration file path
+ * Load merged configuration from global and project-local files
+ * Project-local overrides global
+ * Returns merged CliContext
  */
-export function getConfigPath(): string {
-  return process.env['LCP_CONFIG_PATH'] ?? CONFIG_FILE;
+export function loadConfig(): CliContext {
+  // Load global config
+  const globalPath = getGlobalConfigPath();
+  const globalConfig = loadConfigFile(globalPath);
+
+  // Find and load project-local config
+  const projectLocalPath = findProjectLocalConfig();
+  const projectLocalConfig = projectLocalPath ? loadConfigFile(projectLocalPath) : {};
+
+  // Merge configurations (project-local overrides global)
+  return mergeConfigs(globalConfig, projectLocalConfig);
 }
 
 /**
- * Check if configuration file exists
+ * Load config and merge with command-line options
+ * Command-line options have highest priority
  */
-export function configFileExists(): boolean {
-  return existsSync(getConfigPath());
+export function loadConfigWithOptions(options: Partial<CliContext>): CliContext {
+  const fileConfig = loadConfig();
+
+  // Merge file config with options (options override file config)
+  return mergeConfigs(fileConfig, options);
+}
+
+/**
+ * Check if global config file exists
+ */
+export function globalConfigExists(): boolean {
+  return existsSync(getGlobalConfigPath());
+}
+
+/**
+ * Check if project-local config file exists in current directory tree
+ */
+export function projectLocalConfigExists(): boolean {
+  return findProjectLocalConfig() !== null;
+}
+
+/**
+ * Get the path to the project-local config file if it exists
+ */
+export function getProjectLocalConfigPath(): string | null {
+  return findProjectLocalConfig();
 }

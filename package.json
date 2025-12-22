@@ -32,8 +32,10 @@
   },
   "dependencies": {
     "@stainedhead/lc-platform-dev-accelerators": "file:../lc-platform-dev-accelerators",
+    "chalk": "^5.3.0",
     "commander": "^12.1.0",
-    "chalk": "^5.3.0"
+    "ora": "9.0.0",
+    "zod": "4.2.1"
   },
   "devDependencies": {
     "@types/bun": "^1.1.14",

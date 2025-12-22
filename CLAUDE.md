@@ -63,3 +63,10 @@ Use these commands for feature development:
 - `/speckit.plan` - Design implementation
 - `/speckit.tasks` - Generate task breakdown
 - `/speckit.implement` - Execute implementation
+
+## Active Technologies
+- TypeScript (Bun 1.0+ runtime) + commander (CLI parsing), @stainedhead/lc-platform-dev-accelerators (core library) (001-menu-framework)
+- JSON files (~/.lcp/config.json for global, .lcp/config.json for project-local), platform storage (via core library for cache/deployment) (001-menu-framework)
+
+## Recent Changes
+- 001-menu-framework: Added TypeScript (Bun 1.0+ runtime) + commander (CLI parsing), @stainedhead/lc-platform-dev-accelerators (core library)

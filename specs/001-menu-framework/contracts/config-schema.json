@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lc-platform.dev/schemas/cli-context.json",
+  "title": "CLI Context Configuration",
+  "description": "Schema for lcp CLI context configuration files (~/.lcp/config.json and .lcp/config.json)",
+  "type": "object",
+  "properties": {
+    "account": {
+      "type": "string",
+      "description": "Cloud provider account identifier",
+      "minLength": 1,
+      "examples": ["123456789012", "my-account-id"]
+    },
+    "team": {
+      "type": "string",
+      "description": "Team or organization identifier",
+      "minLength": 1,
+      "examples": ["engineering", "platform-team"]
+    },
+    "moniker": {
+      "type": "string",
+      "description": "Application moniker (unique identifier)",
+      "minLength": 1,
+      "pattern": "^[a-z0-9-]+$",
+      "examples": ["my-app", "api-service"]
+    },
+    "provider": {
+      "type": "string",
+      "description": "Cloud provider selection",
+      "enum": ["aws", "azure", "mock"],
+      "examples": ["aws"]
+    },
+    "region": {
+      "type": "string",
+      "description": "Cloud provider region",
+      "minLength": 1,
+      "examples": ["us-east-1", "westus2"]
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "account": "123456789012",
+      "team": "platform",
+      "moniker": "api-service",
+      "provider": "aws",
+      "region": "us-east-1"
+    },
+    {
+      "team": "engineering",
+      "moniker": "frontend-app"
+    }
+  ]
+}

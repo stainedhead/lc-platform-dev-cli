@@ -212,7 +212,64 @@ export function registerStorageListCommand(program: Command): void {
 
 ### Test-First Development (TDD) - NON-NEGOTIABLE
 
-Per the constitution, tests MUST be written and failing before implementation.
+Per the constitution, tests MUST be written and failing before implementation. This project follows strict TDD practices with the Red-Green-Refactor cycle.
+
+#### Red-Green-Refactor Cycle
+
+**CRITICAL**: Every feature implementation MUST follow this cycle:
+
+1. **RED** - Write a failing test
+   - Write a test that describes the desired behavior
+   - Run the test and verify it fails (red)
+   - Confirm the test fails for the right reason (not syntax errors)
+   - Do NOT write any implementation code yet
+
+2. **GREEN** - Make the test pass
+   - Write the minimal code needed to make the test pass
+   - Focus on making it work, not making it perfect
+   - Run the test and verify it passes (green)
+   - Do NOT add extra features or "improvements"
+
+3. **REFACTOR** - Improve the code
+   - Clean up the implementation while keeping tests green
+   - Remove duplication, improve naming, simplify logic
+   - Run tests after each refactoring step to ensure nothing broke
+   - Update documentation to match the implementation
+
+#### TDD Implementation Rules
+
+- **Tests first, always**: Implementation code MUST NOT be written before tests
+- **One test at a time**: Write one failing test, make it pass, then write the next test
+- **Minimum code**: Write only enough code to make the current test pass
+- **Run tests frequently**: After every small change, run tests to get immediate feedback
+- **Never skip refactoring**: Technical debt accumulates quickly without the refactor step
+
+#### TDD in Practice
+
+**Example workflow for adding a new command**:
+
+```bash
+# 1. RED - Write failing test
+# Create tests/e2e/version-deploy.test.ts with test case
+bun test tests/e2e/version-deploy.test.ts  # Verify it fails
+
+# 2. GREEN - Implement minimal solution
+# Write src/cli/commands/version/deploy.ts
+bun test tests/e2e/version-deploy.test.ts  # Verify it passes
+
+# 3. REFACTOR - Clean up
+# Extract helpers, improve naming, add types
+bun test tests/e2e/version-deploy.test.ts  # Verify still passes
+
+# 4. Repeat for next test case
+```
+
+#### Coverage Requirements
+
+- **Minimum 80%** statement coverage across all files
+- **100%** coverage for critical paths (error handling, validation, state management)
+- Coverage measured with `bun test --coverage`
+- Coverage reports reviewed before merging changes
 
 ### Test Types
 
@@ -294,22 +351,139 @@ bun test --watch            # Watch mode
 
 ### Pre-Checkin Verification
 
+**CRITICAL**: The following verification sequence MUST pass before committing or merging any code changes. This is NON-NEGOTIABLE.
+
+#### Complete Verification Sequence
+
+Run these commands in order. If any step fails, fix the issues before proceeding to the next step:
+
 ```bash
-# 1. Format code
+# 1. Format code (ALWAYS run first)
 bun run format
 
-# 2. Run linting
+# 2. Lint the code
 bun run lint
 
-# 3. Run all tests
+# 3. Run all tests with coverage
 bun test
 
-# 4. Type-check
+# 4. Type-check (no build artifacts, just validation)
 bun run typecheck
 
-# 5. Build
+# 5. Build the CLI
 bun run build
+
+# All steps must pass with zero errors
 ```
+
+#### One-Line Pre-Commit Command
+
+For convenience, run all checks in sequence:
+
+```bash
+bun run format && bun run lint && bun test && bun run typecheck && bun run build
+```
+
+**Note**: The `&&` operator ensures the sequence stops at the first failure, making it easy to identify which step needs fixing.
+
+#### What Each Step Validates
+
+1. **`bun run format`** - Auto-formats all TypeScript files with Prettier
+   - Ensures consistent code style across the codebase
+   - Fixes spacing, indentation, line length automatically
+   - MUST be run before linting to avoid style conflicts
+
+2. **`bun run lint`** - Runs ESLint with TypeScript rules
+   - Catches common bugs and anti-patterns
+   - Enforces code quality standards
+   - Identifies unused variables, missing types, incorrect patterns
+   - Zero errors and zero warnings required
+
+3. **`bun test`** - Runs complete test suite (unit + integration + e2e)
+   - Verifies all 158+ tests pass
+   - Validates test coverage meets 80% minimum
+   - Ensures no regressions in existing functionality
+   - Tests run in parallel for speed (< 5 seconds typical)
+
+4. **`bun run typecheck`** - TypeScript compiler validation (no emit)
+   - Validates all TypeScript types are correct
+   - Catches type errors that might not show in tests
+   - Faster than full build (no output files generated)
+   - Required to pass before building
+
+5. **`bun run build`** - Compiles TypeScript to JavaScript
+   - Generates executable CLI in `dist/`
+   - Final validation that code actually compiles and bundles
+   - Creates production-ready artifacts
+   - Must complete without errors or warnings
+
+#### Verification Checklist
+
+Before committing code, confirm:
+
+- [ ] All files formatted with Prettier (`bun run format`)
+- [ ] ESLint shows zero errors and warnings (`bun run lint`)
+- [ ] All tests pass with 80%+ coverage (`bun test`)
+- [ ] TypeScript validation passes (`bun run typecheck`)
+- [ ] Build completes successfully (`bun run build`)
+- [ ] Documentation updated if commands/architecture changed
+- [ ] Commit message describes what changed and why
+
+#### Build Failure Recovery
+
+If any step fails:
+
+1. **Format failure**: Usually impossible, but re-run `bun run format`
+2. **Lint failure**: Read the error message, fix the code, re-run from step 1
+3. **Test failure**: Fix the test or implementation, re-run from step 1
+4. **Typecheck failure**: Fix TypeScript errors, re-run from step 1
+5. **Build failure**: Usually a TypeScript issue missed by typecheck, fix and re-run from step 1
+
+**Never skip steps** - Each builds on the previous step's success.
+
+## Documentation Maintenance
+
+### Required Documentation Files
+
+The following documentation files in `documentation/` MUST be kept up to date with all code changes:
+
+1. **`documentation/product-summary.md`** - High-level product overview
+   - Update when: Adding new features, changing architecture, updating capabilities
+   - Contains: Overview, target users, value propositions, current status, roadmap
+
+2. **`documentation/product-details.md`** - Comprehensive command reference
+   - Update when: Adding/modifying commands, changing flags, updating workflows
+   - Contains: Full command reference, configuration system, workflow patterns, error handling, integration examples
+
+3. **`documentation/technical-details.md`** - Technical implementation guide
+   - Update when: Changing architecture, adding dependencies, modifying test strategy, updating build process
+   - Contains: Architecture diagrams, technology stack, project structure, TDD strategy, build workflows, code quality standards
+
+### Documentation Update Rules
+
+**CRITICAL**: Every feature implementation, command change, or architectural update MUST include corresponding documentation updates.
+
+#### When to Update Documentation
+
+- **Before merging**: All documentation updates must be included in the same PR/commit as code changes
+- **New commands**: Update all three documentation files
+- **Modified commands**: Update product-details.md with new flags, examples, and behavior
+- **Architecture changes**: Update product-summary.md and technical-details.md
+- **Dependency changes**: Update technical-details.md technology stack section
+- **Test strategy changes**: Update technical-details.md TDD strategy section
+- **Build process changes**: Update technical-details.md build workflows section
+
+#### Documentation Review Checklist
+
+Before completing any feature work, verify:
+
+- [ ] product-summary.md reflects current feature set and capabilities
+- [ ] product-details.md includes all implemented commands with accurate examples
+- [ ] technical-details.md matches current architecture and tech stack
+- [ ] All code examples in documentation are tested and working
+- [ ] All command examples use correct flag names (e.g., `--ver` not `--version`)
+- [ ] Error messages in documentation match actual implementation
+- [ ] Workflow patterns are up to date with current command structure
 
 ## Configuration
 
