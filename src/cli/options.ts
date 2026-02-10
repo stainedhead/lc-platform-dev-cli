@@ -13,6 +13,8 @@ export interface GlobalOptions {
   moniker?: string;
   provider?: 'aws' | 'azure' | 'mock';
   region?: string;
+  // Active app override
+  app?: string;
   // Legacy profile option
   profile?: string;
   // Output and behavior options
@@ -42,6 +44,12 @@ export function setupGlobalOptions(program: Command): void {
       process.env['LCP_PROVIDER']
     )
     .option('-r, --region <region>', 'Cloud region', process.env['LCP_REGION'])
+    // Active app override (one-off context switch)
+    .option(
+      '-a, --app <moniker>',
+      'Use specific app for this command (moniker or team/moniker)',
+      process.env['LCP_APP']
+    )
     // Legacy profile option
     .option('--profile <name>', 'Named configuration profile', process.env['LCP_PROFILE'])
     // Output and behavior options
@@ -60,11 +68,41 @@ export function getGlobalOptions(command: Command): GlobalOptions {
 }
 
 /**
+ * Parse app flag (--app or -a) which can be:
+ * - "moniker" (uses team from context)
+ * - "team/moniker" (explicit team/moniker)
+ */
+function parseAppFlag(
+  appFlag: string,
+  currentContext: CliContext
+): { team?: string; moniker?: string } {
+  const parts = appFlag.split('/');
+
+  if (parts.length === 1) {
+    // Just moniker, use team from current context
+    return {
+      team: currentContext.team,
+      moniker: parts[0],
+    };
+  } else if (parts.length === 2) {
+    // team/moniker format
+    return {
+      team: parts[0],
+      moniker: parts[1],
+    };
+  }
+
+  // Invalid format, return empty
+  return {};
+}
+
+/**
  * Load and resolve CLI context with proper precedence:
  * 1. Command-line flags (from GlobalOptions)
- * 2. Project-local config (.lcp/config.json)
- * 3. Global config (~/.lcp/config.json)
- * 4. Empty defaults
+ * 2. -a/--app flag (temporary active app override)
+ * 3. Project-local config (.lcp/config.json)
+ * 4. Global config (~/.lcp/config.json)
+ * 5. Empty defaults
  *
  * @param command - The commander Command instance
  * @returns Resolved CliContext with all sources merged
@@ -81,7 +119,17 @@ export function getResolvedContext(command: Command): CliContext {
   if (options.provider !== undefined) contextOptions.provider = options.provider;
   if (options.region !== undefined) contextOptions.region = options.region;
 
-  // Load config files and merge with CLI options
-  // CLI options have highest priority
-  return loadConfigWithOptions(contextOptions);
+  // Load config files first
+  const baseContext = loadConfigWithOptions(contextOptions);
+
+  // Handle -a/--app flag (one-off active app override)
+  if (options.app) {
+    const appOverride = parseAppFlag(options.app, baseContext);
+
+    // Apply app override (team and moniker from -a flag)
+    if (appOverride.team) baseContext.team = appOverride.team;
+    if (appOverride.moniker) baseContext.moniker = appOverride.moniker;
+  }
+
+  return baseContext;
 }

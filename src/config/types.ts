@@ -8,6 +8,20 @@
 export type ProviderName = 'aws' | 'azure' | 'mock';
 
 /**
+ * Active application reference
+ */
+export interface ActiveApp {
+  /** Cloud provider account identifier */
+  account: string;
+
+  /** Team or organization identifier */
+  team: string;
+
+  /** Application moniker (unique identifier) */
+  moniker: string;
+}
+
+/**
  * CLI Context Configuration
  * Persistent configuration stored in ~/.lcp/config.json (global) and .lcp/config.json (project-local)
  * All fields are optional to allow partial configuration
@@ -27,6 +41,9 @@ export interface CliContext {
 
   /** Cloud provider region */
   region?: string;
+
+  /** Active application context (auto-fills account/team/moniker when not provided) */
+  activeApp?: ActiveApp;
 }
 
 /**

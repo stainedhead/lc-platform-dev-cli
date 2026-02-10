@@ -8,7 +8,7 @@
  * 4. Empty defaults (all fields optional)
  */
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import type { CliContext } from './types.js';
@@ -130,12 +130,28 @@ export function loadConfig(): CliContext {
 /**
  * Load config and merge with command-line options
  * Command-line options have highest priority
+ * If activeApp is set and account/team/moniker are not provided, use activeApp values
  */
 export function loadConfigWithOptions(options: Partial<CliContext>): CliContext {
   const fileConfig = loadConfig();
 
   // Merge file config with options (options override file config)
-  return mergeConfigs(fileConfig, options);
+  const merged = mergeConfigs(fileConfig, options);
+
+  // If activeApp is set, use it to fill missing account/team/moniker
+  if (merged.activeApp) {
+    if (!merged.account) {
+      merged.account = merged.activeApp.account;
+    }
+    if (!merged.team) {
+      merged.team = merged.activeApp.team;
+    }
+    if (!merged.moniker) {
+      merged.moniker = merged.activeApp.moniker;
+    }
+  }
+
+  return merged;
 }
 
 /**
@@ -157,4 +173,22 @@ export function projectLocalConfigExists(): boolean {
  */
 export function getProjectLocalConfigPath(): string | null {
   return findProjectLocalConfig();
+}
+
+/**
+ * Save config to project-local file (.lcp/config.json in current directory)
+ * Creates the directory if it doesn't exist
+ */
+export function saveConfig(config: CliContext): void {
+  const configDir = join(process.cwd(), '.lcp');
+  const configPath = join(configDir, 'config.json');
+
+  // Create directory if it doesn't exist
+  if (!existsSync(configDir)) {
+    mkdirSync(configDir, { recursive: true });
+  }
+
+  // Write config to file
+  const content = JSON.stringify(config, null, 2);
+  writeFileSync(configPath, content, 'utf-8');
 }

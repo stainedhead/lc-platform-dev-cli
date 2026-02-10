@@ -1,0 +1,12 @@
+{
+  "account": "test-account",
+  "team": "test-team",
+  "moniker": "test-app",
+  "provider": "mock",
+  "region": "us-east-1",
+  "activeApp": {
+    "account": "test-account",
+    "team": "test-team",
+    "moniker": "test-app"
+  }
+}

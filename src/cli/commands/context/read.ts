@@ -29,14 +29,32 @@ export function createReadCommand(): Command {
           console.log('Current context configuration:');
           console.log('');
 
-          // Display each field with padding
-          const maxKeyLength = Math.max(...Object.keys(config).map((k) => k.length));
+          // Display activeApp separately if set
+          if (config.activeApp) {
+            console.log('Active Application:');
+            console.log(`  Account: ${config.activeApp.account}`);
+            console.log(`  Team: ${config.activeApp.team}`);
+            console.log(`  Moniker: ${config.activeApp.moniker}`);
+            console.log('');
+          }
 
+          // Display other context fields
+          console.log('Context:');
+          const contextFields: Record<string, unknown> = {};
           for (const [key, value] of Object.entries(config)) {
-            if (value !== undefined && value !== null) {
+            if (key !== 'activeApp' && value !== undefined && value !== null) {
+              contextFields[key] = value;
+            }
+          }
+
+          if (Object.keys(contextFields).length > 0) {
+            const maxKeyLength = Math.max(...Object.keys(contextFields).map((k) => k.length));
+            for (const [key, value] of Object.entries(contextFields)) {
               const paddedKey = key.padEnd(maxKeyLength);
               console.log(`  ${paddedKey}: ${value}`);
             }
+          } else {
+            console.log('  (no additional context fields set)');
           }
         }
       }

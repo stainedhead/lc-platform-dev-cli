@@ -9,7 +9,8 @@ import { getResolvedContext } from '../../options.js';
 import { validateRequiredContext } from '../../../utils/validation.js';
 import { createAdapters } from '../../../utils/adapter-factory.js';
 import { LCPlatformAppConfigurator } from '../../../../../lc-platform-processing-lib/src/index.js';
-import type { CliContext } from '../../../config/types.js';
+import { loadConfig, saveConfig } from '../../../config/loader.js';
+import type { CliContext, ActiveApp } from '../../../config/types.js';
 
 // Required context fields for app init
 const REQUIRED_FIELDS = ['account', 'team', 'moniker', 'provider', 'region'] as const;
@@ -130,6 +131,16 @@ export function createInitCommand(): Command {
         // Initialize app via core library (T031 - includes duplicate detection)
         const result = await initializeApp(context, appConfig);
 
+        // Set as active app (auto-set on init)
+        const currentConfig = loadConfig();
+        const activeApp: ActiveApp = {
+          account: context.account!,
+          team: context.team!,
+          moniker: context.moniker!,
+        };
+        currentConfig.activeApp = activeApp;
+        saveConfig(currentConfig);
+
         // Output result
         if (cmdOptions.json) {
           console.log(
@@ -154,6 +165,9 @@ export function createInitCommand(): Command {
           console.log(`  Team: ${context.team}`);
           if (context.provider) console.log(`  Provider: ${context.provider}`);
           if (result.id) console.log(`  ID: ${result.id}`);
+          console.log('');
+          console.log('✓ Set as active application');
+          console.log('  Subsequent commands will use this context automatically.');
         }
       } catch (error) {
         if (cmdOptions.debug) {
