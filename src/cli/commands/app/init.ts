@@ -4,81 +4,57 @@
  */
 
 import { Command } from 'commander';
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { readFileSync, existsSync } from 'node:fs';
 import { getResolvedContext } from '../../options.js';
 import { validateRequiredContext } from '../../../utils/validation.js';
+import { createAdapters } from '../../../utils/adapter-factory.js';
+import { LCPlatformAppConfigurator } from '../../../../../lc-platform-processing-lib/src/index.js';
 import type { CliContext } from '../../../config/types.js';
 
 // Required context fields for app init
-const REQUIRED_FIELDS = ['account', 'team', 'moniker'] as const;
+const REQUIRED_FIELDS = ['account', 'team', 'moniker', 'provider', 'region'] as const;
 
 /**
- * Get path to mock apps state file
- */
-function getMockAppsPath(): string {
-  return join(homedir(), '.lcp', 'mock-apps.json');
-}
-
-/**
- * Load mock apps from state file
- */
-function loadMockApps(): Set<string> {
-  const path = getMockAppsPath();
-  if (!existsSync(path)) {
-    return new Set();
-  }
-
-  try {
-    const data = readFileSync(path, 'utf-8');
-    const apps = JSON.parse(data);
-    return new Set(apps);
-  } catch {
-    return new Set();
-  }
-}
-
-/**
- * Save mock apps to state file
- */
-function saveMockApps(apps: Set<string>): void {
-  const path = getMockAppsPath();
-  const dir = join(homedir(), '.lcp');
-
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(path, JSON.stringify([...apps], null, 2));
-}
-
-/**
- * Mock app initialization
- * TODO: Replace with actual core library integration when available
+ * Initialize application using ApplicationConfigurator
  */
 async function initializeApp(
   context: CliContext,
-  _config?: Record<string, unknown>
+  metadata?: Record<string, unknown>
 ): Promise<{ id: string; status: string }> {
-  // Load existing apps
-  const mockApps = loadMockApps();
-
-  // Create unique key for app
-  const appKey = `${context.account}/${context.team}/${context.moniker}`;
-
-  // Check for duplicate (FR-010 acceptance scenario 3, T031)
-  if (mockApps.has(appKey)) {
-    throw new Error(
-      `Application already exists: ${context.account}/${context.team}/${context.moniker}\n\n` +
-        `To update the existing application, use: lcp app update --config <file>`
-    );
+  // Create adapters from context
+  const adapterResult = createAdapters(context);
+  if (!adapterResult.success) {
+    throw new Error(`Failed to create adapters: ${adapterResult.error}`);
   }
 
-  // Register app
-  mockApps.add(appKey);
-  saveMockApps(mockApps);
+  const { storage } = adapterResult.adapters!;
 
-  // Simulate app initialization
+  // Create ApplicationConfigurator
+  const appConfigurator = new LCPlatformAppConfigurator(storage);
+
+  // Initialize application
+  const result = await appConfigurator.init({
+    account: context.account!,
+    team: context.team!,
+    moniker: context.moniker!,
+    metadata: metadata || {},
+  });
+
+  if (!result.success) {
+    // Map ConfigurationError to user-friendly message
+    const error = result.error;
+    if (error.code === 'ALREADY_EXISTS') {
+      throw new Error(
+        `Application already exists: ${context.account}/${context.team}/${context.moniker}\n\n` +
+          `To update the existing application, use: lcp app update --config <file>`
+      );
+    }
+    throw new Error(error.message);
+  }
+
+  const app = result.value;
   return {
-    id: `app-${Date.now()}`,
+    id: app.id,
     status: 'active',
   };
 }

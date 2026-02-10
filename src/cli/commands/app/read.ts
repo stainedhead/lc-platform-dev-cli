@@ -6,25 +6,54 @@
 import { Command } from 'commander';
 import { getResolvedContext } from '../../options.js';
 import { validateRequiredContext } from '../../../utils/validation.js';
+import { createAdapters } from '../../../utils/adapter-factory.js';
+import { LCPlatformAppConfigurator } from '../../../../../lc-platform-processing-lib/src/index.js';
 import type { CliContext } from '../../../config/types.js';
 
-const REQUIRED_FIELDS = ['account', 'team', 'moniker'] as const;
+const REQUIRED_FIELDS = ['account', 'team', 'moniker', 'provider', 'region'] as const;
 
 /**
- * Mock app read
- * TODO: Replace with actual core library integration
+ * Read application using ApplicationConfigurator
  */
 async function readApp(context: CliContext): Promise<Record<string, unknown>> {
-  // Simulate reading app configuration
+  // Create adapters from context
+  const adapterResult = createAdapters(context);
+  if (!adapterResult.success) {
+    throw new Error(`Failed to create adapters: ${adapterResult.error}`);
+  }
+
+  const { storage } = adapterResult.adapters!;
+
+  // Create ApplicationConfigurator
+  const appConfigurator = new LCPlatformAppConfigurator(storage);
+
+  // Read application
+  const result = await appConfigurator.read({
+    account: context.account!,
+    team: context.team!,
+    moniker: context.moniker!,
+  });
+
+  if (!result.success) {
+    const error = result.error;
+    if (error.code === 'NOT_FOUND') {
+      throw new Error(
+        `Application not found: ${context.account}/${context.team}/${context.moniker}\n\n` +
+          `Initialize the application first with: lcp app init`
+      );
+    }
+    throw new Error(error.message);
+  }
+
+  const app = result.value;
   return {
-    id: `app-${context.moniker}`,
-    moniker: context.moniker,
-    account: context.account,
-    team: context.team,
-    provider: context.provider || 'mock',
-    region: context.region || 'us-east-1',
-    status: 'active',
-    createdAt: new Date().toISOString(),
+    id: app.id,
+    moniker: app.moniker,
+    account: app.account,
+    team: app.team,
+    createdAt: app.createdAt.toISOString(),
+    updatedAt: app.updatedAt.toISOString(),
+    ...app.metadata,
   };
 }
 

@@ -4,17 +4,17 @@
  */
 
 import { Command } from 'commander';
-import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { readFileSync, existsSync } from 'node:fs';
 import { getResolvedContext } from '../../options.js';
 import { validateRequiredContext } from '../../../utils/validation.js';
+import { createAdapters } from '../../../utils/adapter-factory.js';
+import { LCPlatformAppConfigurator } from '../../../../../lc-platform-processing-lib/src/index.js';
 import type { CliContext } from '../../../config/types.js';
 
-const REQUIRED_FIELDS = ['account', 'team', 'moniker'] as const;
+const REQUIRED_FIELDS = ['account', 'team', 'moniker', 'provider', 'region'] as const;
 
 /**
- * Basic config validation (same as validate command)
+ * Basic config validation
  */
 function validateAppConfig(config: Record<string, unknown>): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
@@ -57,43 +57,45 @@ function validateAppConfig(config: Record<string, unknown>): { valid: boolean; e
 }
 
 /**
- * Get path to mock app configs storage
- */
-function getMockAppConfigPath(appKey: string): string {
-  return join(homedir(), '.lcp', 'mock-app-configs', `${appKey.replace(/\//g, '-')}.json`);
-}
-
-/**
- * Mock app update
- * TODO: Replace with actual core library integration
+ * Update application using ApplicationConfigurator
  */
 async function updateApp(
   context: CliContext,
-  config: Record<string, unknown>
+  metadata: Record<string, unknown>
 ): Promise<{ id: string; status: string; updated: boolean }> {
-  const appKey = `${context.account}/${context.team}/${context.moniker}`;
-  const configPath = getMockAppConfigPath(appKey);
-  const dir = join(homedir(), '.lcp', 'mock-app-configs');
+  // Create adapters from context
+  const adapterResult = createAdapters(context);
+  if (!adapterResult.success) {
+    throw new Error(`Failed to create adapters: ${adapterResult.error}`);
+  }
 
-  // Create directory if it doesn't exist
-  mkdirSync(dir, { recursive: true });
+  const { storage } = adapterResult.adapters!;
 
-  // Save config
-  writeFileSync(
-    configPath,
-    JSON.stringify(
-      {
-        appKey,
-        config,
-        updatedAt: new Date().toISOString(),
-      },
-      null,
-      2
-    )
-  );
+  // Create ApplicationConfigurator
+  const appConfigurator = new LCPlatformAppConfigurator(storage);
 
+  // Update application
+  const result = await appConfigurator.update({
+    account: context.account!,
+    team: context.team!,
+    moniker: context.moniker!,
+    metadata,
+  });
+
+  if (!result.success) {
+    const error = result.error;
+    if (error.code === 'NOT_FOUND') {
+      throw new Error(
+        `Application not found: ${context.account}/${context.team}/${context.moniker}\n\n` +
+          `Initialize the application first with: lcp app init`
+      );
+    }
+    throw new Error(error.message);
+  }
+
+  const app = result.value;
   return {
-    id: `app-${context.moniker}`,
+    id: app.id,
     status: 'active',
     updated: true,
   };

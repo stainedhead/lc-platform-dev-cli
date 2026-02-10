@@ -104,7 +104,7 @@ describe('App Commands E2E', () => {
       beforeEach(() => {
         // Set up complete context
         execSync(
-          `${CLI_CMD} context write --account test-account --team test-team --moniker test-app --provider mock`,
+          `${CLI_CMD} context write --account test-account --team test-team --moniker test-app --provider mock --region us-east-1`,
           {
             env: { ...process.env, HOME: testHome },
             encoding: 'utf-8',
@@ -177,7 +177,7 @@ describe('App Commands E2E', () => {
       beforeEach(() => {
         // Set up default context
         execSync(
-          `${CLI_CMD} context write --account default-account --team default-team --moniker default-app --provider mock`,
+          `${CLI_CMD} context write --account default-account --team default-team --moniker default-app --provider mock --region us-east-1`,
           {
             env: { ...process.env, HOME: testHome },
             encoding: 'utf-8',
@@ -210,7 +210,7 @@ describe('App Commands E2E', () => {
     describe('with dry-run mode', () => {
       beforeEach(() => {
         execSync(
-          `${CLI_CMD} context write --account test-account --team test-team --moniker test-app --provider mock`,
+          `${CLI_CMD} context write --account test-account --team test-team --moniker test-app --provider mock --region us-east-1`,
           {
             env: { ...process.env, HOME: testHome },
             encoding: 'utf-8',
@@ -238,7 +238,7 @@ describe('App Commands E2E', () => {
     beforeEach(() => {
       // Set up context
       execSync(
-        `${CLI_CMD} context write --account wf-account --team wf-team --moniker wf-app --provider mock`,
+        `${CLI_CMD} context write --account wf-account --team wf-team --moniker wf-app --provider mock --region us-east-1`,
         {
           env: { ...process.env, HOME: testHome },
           encoding: 'utf-8',
