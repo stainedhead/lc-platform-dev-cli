@@ -10,6 +10,7 @@ import { validateRequiredContext } from '../../../utils/validation.js';
 import { createAdapters } from '../../../utils/adapter-factory.js';
 import { LCPlatformAppConfigurator } from '../../../../../lc-platform-processing-lib/src/index.js';
 import { loadConfig, saveConfig } from '../../../config/loader.js';
+import { enrichAndHandleError } from '../../../utils/error-enrichment.js';
 import type { CliContext, ActiveApp } from '../../../config/types.js';
 
 // Required context fields for app init
@@ -42,15 +43,8 @@ async function initializeApp(
   });
 
   if (!result.success) {
-    // Map ConfigurationError to user-friendly message
-    const error = result.error;
-    if (error.code === 'ALREADY_EXISTS') {
-      throw new Error(
-        `Application already exists: ${context.account}/${context.team}/${context.moniker}\n\n` +
-          `To update the existing application, use: lcp app update --config <file>`
-      );
-    }
-    throw new Error(error.message);
+    // Use error enrichment for user-friendly messages
+    throw result.error;
   }
 
   const app = result.value;
@@ -170,11 +164,19 @@ export function createInitCommand(): Command {
           console.log('  Subsequent commands will use this context automatically.');
         }
       } catch (error) {
-        if (cmdOptions.debug) {
-          console.error('Debug: Full error:', error);
-        }
-        console.error(`Error: ${(error as Error).message}`);
-        process.exit(1);
+        // Use error enrichment for better user experience
+        enrichAndHandleError(
+          error as { code?: string; message: string },
+          {
+            resource: 'Application',
+            command: 'app init',
+            details: (error as Error).message,
+          },
+          {
+            debug: cmdOptions.debug,
+            json: cmdOptions.json,
+          }
+        );
       }
     });
 }
