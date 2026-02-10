@@ -6,6 +6,7 @@ import type { Command } from 'commander';
 import { createContextCommand } from './context/index.js';
 import { createAppCommand } from './app/index.js';
 import { createVersionCommand } from './version/index.js';
+import { createDependencyCommand } from './dependency/index.js';
 
 // Import command registrations as they are implemented
 // import { registerStorageCommands } from './storage/index.js';
@@ -28,6 +29,9 @@ export function registerCommands(program: Command): void {
 
   // Version management commands
   program.addCommand(createVersionCommand());
+
+  // Dependency management commands
+  program.addCommand(createDependencyCommand());
 
   // TODO: Uncomment as commands are implemented
   // registerStorageCommands(program);
