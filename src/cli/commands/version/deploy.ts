@@ -4,148 +4,81 @@
  */
 
 import { Command } from 'commander';
-import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { getResolvedContext } from '../../options.js';
 import { validateRequiredContext } from '../../../utils/validation.js';
+import { createAdapters } from '../../../utils/adapter-factory.js';
+import { LCPlatformAppVersionConfigurator } from '../../../../../lc-platform-processing-lib/src/index.js';
 import type { CliContext } from '../../../config/types.js';
 
-const REQUIRED_FIELDS = ['account', 'team', 'moniker'] as const;
-
-interface VersionData {
-  isDeployed?: boolean;
-  lastDeployed?: string;
-  deploymentScope?: string;
-  [key: string]: unknown;
-}
+const REQUIRED_FIELDS = ['account', 'team', 'moniker', 'provider', 'region'] as const;
 
 /**
- * Get path to mock versions storage
- */
-function getMockVersionsPath(appKey: string): string {
-  return join(homedir(), '.lcp', 'mock-versions', `${appKey.replace(/\//g, '-')}.json`);
-}
-
-/**
- * Load existing versions for an app
- */
-function loadVersions(appKey: string): Record<string, VersionData> {
-  const path = getMockVersionsPath(appKey);
-  if (!existsSync(path)) {
-    return {};
-  }
-
-  try {
-    const data = readFileSync(path, 'utf-8');
-    return JSON.parse(data) as Record<string, VersionData>;
-  } catch {
-    return {};
-  }
-}
-
-/**
- * Save versions for an app
- */
-function saveVersions(appKey: string, versions: Record<string, VersionData>): void {
-  const path = getMockVersionsPath(appKey);
-  const dir = join(homedir(), '.lcp', 'mock-versions');
-
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(path, JSON.stringify(versions, null, 2));
-}
-
-/**
- * Simulate deployment progress
- */
-async function simulateDeployment(
-  scope: string,
-  platformTooling: boolean,
-  quiet: boolean
-): Promise<void> {
-  if (platformTooling || quiet) {
-    return; // No progress for platform mode or quiet mode
-  }
-
-  const steps = [
-    'Validating version configuration',
-    `Deploying ${scope}`,
-    'Updating routing configuration',
-    'Running health checks',
-    'Deployment complete',
-  ];
-
-  for (const step of steps) {
-    console.log(`  ${step}...`);
-    await new Promise((resolve) => globalThis.setTimeout(resolve, 200));
-  }
-}
-
-/**
- * Mock version deploy
- * TODO: Replace with actual core library integration
+ * Deploy version using VersionConfigurator
  */
 async function deployVersion(
   context: CliContext,
-  version: string,
-  scope: string,
+  versionNumber: string,
+  scope: 'all' | 'app-only' | 'dependencies-only',
   platformTooling: boolean,
-  dryRun: boolean,
   quiet: boolean
-): Promise<{ id: string; version: string; deployed: boolean; eventId?: string }> {
-  const appKey = `${context.account}/${context.team}/${context.moniker}`;
-  const versions = loadVersions(appKey);
-
-  // Check if version exists
-  if (!versions[version]) {
-    throw new Error(
-      `Version not found: ${version}\n\n` +
-        `Available versions: ${Object.keys(versions).join(', ') || 'none'}\n` +
-        `To add a new version, use: lcp version add --version ${version} --config <file>`
-    );
+): Promise<{
+  id: string;
+  version: string;
+  deployed: boolean;
+  eventId?: string;
+  deploymentLog?: string[];
+}> {
+  // Create adapters from context
+  const adapterResult = createAdapters(context);
+  if (!adapterResult.success) {
+    throw new Error(`Failed to create adapters: ${adapterResult.error}`);
   }
 
-  // Dry-run mode
-  if (dryRun) {
-    return {
-      id: `deployment-${Date.now()}`,
-      version,
-      deployed: false,
-    };
+  const { storage, policy, deployment } = adapterResult.adapters!;
+
+  // Create VersionConfigurator
+  const versionConfigurator = new LCPlatformAppVersionConfigurator(storage, policy, deployment);
+
+  // Show progress for local mode
+  const progressCallback = !platformTooling && !quiet
+    ? (message: string) => console.log(`  ${message}...`)
+    : undefined;
+
+  // Map scope to deployment options
+  const deployApp = scope === 'all' || scope === 'app-only';
+  const deployDependencies = scope === 'all' || scope === 'dependencies-only';
+
+  // Deploy version
+  const result = await versionConfigurator.deploy({
+    account: context.account!,
+    team: context.team!,
+    moniker: context.moniker!,
+    versionNumber,
+    deployApp,
+    deployDependencies,
+    async: platformTooling,
+    onProgress: progressCallback,
+  });
+
+  if (!result.success) {
+    const error = result.error;
+    if (error.code === 'NOT_FOUND') {
+      throw new Error(
+        `Version not found: ${versionNumber}\n\n` +
+          `To add a new version, use: lcp version add --ver ${versionNumber} --config <file>`
+      );
+    }
+    throw new Error(error.message);
   }
 
-  // Mark all other versions as not deployed
-  for (const v of Object.keys(versions)) {
-    versions[v]!.isDeployed = false;
-  }
-
-  // Mark this version as deployed
-  if (!versions[version]) {
-    versions[version] = {};
-  }
-  versions[version]!.isDeployed = true;
-  versions[version]!.lastDeployed = new Date().toISOString();
-  versions[version]!.deploymentScope = scope;
-
-  saveVersions(appKey, versions);
-
-  // Simulate deployment progress
-  await simulateDeployment(scope, platformTooling, quiet);
-
-  // Platform mode returns event ID
-  if (platformTooling) {
-    return {
-      id: `deployment-${Date.now()}`,
-      version,
-      deployed: true,
-      eventId: `event-${Date.now()}`,
-    };
-  }
+  const deploymentResult = result.value;
 
   return {
-    id: `deployment-${Date.now()}`,
-    version,
-    deployed: true,
+    id: deploymentResult.id,
+    version: versionNumber,
+    deployed: deploymentResult.status === 'completed',
+    eventId: platformTooling ? deploymentResult.eventId : undefined,
+    deploymentLog: deploymentResult.log,
   };
 }
 
@@ -237,7 +170,7 @@ Deployment Modes:
         }
 
         // Determine scope
-        let scope = 'all';
+        let scope: 'all' | 'app-only' | 'dependencies-only' = 'all';
         if (cmdOptions.appOnly) scope = 'app-only';
         else if (cmdOptions.dependenciesOnly) scope = 'dependencies-only';
 
@@ -266,7 +199,6 @@ Deployment Modes:
           cmdOptions.ver,
           scope,
           cmdOptions.platformTooling || false,
-          cmdOptions.dryRun || false,
           cmdOptions.quiet || false
         );
 

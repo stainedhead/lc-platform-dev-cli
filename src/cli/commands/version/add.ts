@@ -4,84 +4,69 @@
  */
 
 import { Command } from 'commander';
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { readFileSync, existsSync } from 'node:fs';
 import { getResolvedContext } from '../../options.js';
 import { validateRequiredContext } from '../../../utils/validation.js';
+import { createAdapters } from '../../../utils/adapter-factory.js';
+import { LCPlatformAppVersionConfigurator } from '../../../../../lc-platform-processing-lib/src/index.js';
 import type { CliContext } from '../../../config/types.js';
 
-const REQUIRED_FIELDS = ['account', 'team', 'moniker'] as const;
+const REQUIRED_FIELDS = ['account', 'team', 'moniker', 'provider', 'region'] as const;
 
 /**
- * Get path to mock versions storage
- */
-function getMockVersionsPath(appKey: string): string {
-  return join(homedir(), '.lcp', 'mock-versions', `${appKey.replace(/\//g, '-')}.json`);
-}
-
-/**
- * Load existing versions for an app
- */
-function loadVersions(appKey: string): Record<string, unknown> {
-  const path = getMockVersionsPath(appKey);
-  if (!existsSync(path)) {
-    return {};
-  }
-
-  try {
-    const data = readFileSync(path, 'utf-8');
-    return JSON.parse(data) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
-
-/**
- * Save versions for an app
- */
-function saveVersions(appKey: string, versions: Record<string, unknown>): void {
-  const path = getMockVersionsPath(appKey);
-  const dir = join(homedir(), '.lcp', 'mock-versions');
-
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(path, JSON.stringify(versions, null, 2));
-}
-
-/**
- * Mock version add
- * TODO: Replace with actual core library integration
+ * Add version using VersionConfigurator
  */
 async function addVersion(
   context: CliContext,
-  version: string,
+  versionNumber: string,
   config: Record<string, unknown>
 ): Promise<{ id: string; version: string; created: boolean }> {
-  const appKey = `${context.account}/${context.team}/${context.moniker}`;
-  const versions = loadVersions(appKey);
-
-  // Check if version already exists
-  if (versions[version]) {
-    throw new Error(
-      `Version already exists: ${version}\n\n` +
-        `To update the version, use: lcp version update --version ${version} --config <file>`
-    );
+  // Create adapters from context
+  const adapterResult = createAdapters(context);
+  if (!adapterResult.success) {
+    throw new Error(`Failed to create adapters: ${adapterResult.error}`);
   }
 
-  // Add new version
-  versions[version] = {
-    version,
-    config,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    isDeployed: false,
-  };
+  const { storage, policy, deployment } = adapterResult.adapters!;
 
-  saveVersions(appKey, versions);
+  // Create VersionConfigurator
+  const versionConfigurator = new LCPlatformAppVersionConfigurator(storage, policy, deployment);
 
+  // Extract dependencies and metadata from config
+  const dependencies = config.dependencies as Array<{
+    type: string;
+    name: string;
+    configuration: Record<string, unknown>;
+  }> | undefined;
+
+  const metadata = { ...config };
+  delete metadata.dependencies; // Remove dependencies from metadata
+
+  // Initialize version
+  const result = await versionConfigurator.init({
+    account: context.account!,
+    team: context.team!,
+    moniker: context.moniker!,
+    versionNumber,
+    dependencies,
+    metadata,
+  });
+
+  if (!result.success) {
+    const error = result.error;
+    if (error.code === 'ALREADY_EXISTS') {
+      throw new Error(
+        `Version already exists: ${versionNumber}\n\n` +
+          `To update the version, use: lcp version update --version ${versionNumber} --config <file>`
+      );
+    }
+    throw new Error(error.message);
+  }
+
+  const version = result.value;
   return {
-    id: `version-${version}`,
-    version,
+    id: version.id,
+    version: version.versionNumber,
     created: true,
   };
 }
@@ -89,7 +74,7 @@ async function addVersion(
 export function createAddCommand(): Command {
   return new Command('add')
     .description('Add a new version to an application')
-    .requiredOption('--ver <version>', 'Version identifier (e.g., v1.0.0)')
+    .requiredOption('--ver <version>', 'Version identifier (e.g., v1.0.0 or 1.0.0)')
     .requiredOption('--config <file>', 'Path to version configuration file (JSON)')
     .option('--account <account>', 'Cloud provider account identifier (overrides context)')
     .option('--team <team>', 'Team or organization identifier (overrides context)')
@@ -98,28 +83,8 @@ export function createAddCommand(): Command {
       'after',
       `
 Examples:
-  # Add a new version using context values
   $ lcp version add --ver v1.0.0 --config version-config.json
-
-  # Add a version with explicit context
-  $ lcp version add --ver v1.2.0 --config v1.2.0.json --account prod-aws --team platform --moniker api-service
-
-  # Create version config file (version-config.json):
-  {
-    "name": "my-app-v1.0.0",
-    "description": "Production release",
-    "environment": {
-      "LOG_LEVEL": "info",
-      "PORT": "8080",
-      "NODE_ENV": "production"
-    },
-    "resources": {
-      "compute": {
-        "memory": "2Gi",
-        "cpu": "1000m"
-      }
-    }
-  }
+  $ lcp version add --ver 2.1.0 --config v2-config.json --moniker my-app
 `
     )
     .action(async function (this: Command) {
@@ -138,13 +103,6 @@ Examples:
         // Load and resolve context
         const context = getResolvedContext(this);
         validateRequiredContext(context, REQUIRED_FIELDS, 'version add');
-
-        // Validate version flag provided (FR-025)
-        if (!cmdOptions.ver) {
-          console.error('Error: --ver flag is required');
-          console.error('Usage: lcp version add --ver <version> --config <file>');
-          process.exit(2);
-        }
 
         // Load config file
         if (!existsSync(cmdOptions.config)) {
@@ -186,8 +144,7 @@ Examples:
             )
           );
         } else if (!cmdOptions.quiet) {
-          console.log('✓ Version added successfully');
-          console.log(`  Version: ${result.version}`);
+          console.log(`✓ Version ${result.version} added successfully`);
           console.log(`  Application: ${context.moniker}`);
           console.log(`  Account: ${context.account}`);
           console.log(`  Team: ${context.team}`);

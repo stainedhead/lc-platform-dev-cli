@@ -4,56 +4,67 @@
  */
 
 import { Command } from 'commander';
-import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { getResolvedContext } from '../../options.js';
 import { validateRequiredContext } from '../../../utils/validation.js';
+import { createAdapters } from '../../../utils/adapter-factory.js';
+import { LCPlatformAppVersionConfigurator } from '../../../../../lc-platform-processing-lib/src/index.js';
 import type { CliContext } from '../../../config/types.js';
 
-const REQUIRED_FIELDS = ['account', 'team', 'moniker'] as const;
+const REQUIRED_FIELDS = ['account', 'team', 'moniker', 'provider', 'region'] as const;
 
 /**
- * Get path to mock versions storage
+ * Read version using VersionConfigurator
  */
-function getMockVersionsPath(appKey: string): string {
-  return join(homedir(), '.lcp', 'mock-versions', `${appKey.replace(/\//g, '-')}.json`);
-}
-
-/**
- * Load existing versions for an app
- */
-function loadVersions(appKey: string): Record<string, unknown> {
-  const path = getMockVersionsPath(appKey);
-  if (!existsSync(path)) {
-    return {};
+async function readVersion(
+  context: CliContext,
+  versionNumber: string
+): Promise<{
+  id: string;
+  version: string;
+  metadata: Record<string, unknown>;
+  dependencies: Array<{ type: string; name: string; configuration: Record<string, unknown> }>;
+  createdAt: string;
+  updatedAt: string;
+}> {
+  // Create adapters from context
+  const adapterResult = createAdapters(context);
+  if (!adapterResult.success) {
+    throw new Error(`Failed to create adapters: ${adapterResult.error}`);
   }
 
-  try {
-    const data = readFileSync(path, 'utf-8');
-    return JSON.parse(data) as Record<string, unknown>;
-  } catch {
-    return {};
+  const { storage, policy, deployment } = adapterResult.adapters!;
+
+  // Create VersionConfigurator
+  const versionConfigurator = new LCPlatformAppVersionConfigurator(storage, policy, deployment);
+
+  // Read version
+  const result = await versionConfigurator.read({
+    account: context.account!,
+    team: context.team!,
+    moniker: context.moniker!,
+    versionNumber,
+  });
+
+  if (!result.success) {
+    const error = result.error;
+    if (error.code === 'NOT_FOUND') {
+      throw new Error(
+        `Version not found: ${versionNumber}\n\n` +
+          `To add a new version, use: lcp version add --ver ${versionNumber} --config <file>`
+      );
+    }
+    throw new Error(error.message);
   }
-}
 
-/**
- * Mock version read
- * TODO: Replace with actual core library integration
- */
-async function readVersion(context: CliContext, version: string): Promise<Record<string, unknown>> {
-  const appKey = `${context.account}/${context.team}/${context.moniker}`;
-  const versions = loadVersions(appKey);
-
-  if (!versions[version]) {
-    throw new Error(
-      `Version not found: ${version}\n\n` +
-        `Available versions: ${Object.keys(versions).join(', ') || 'none'}\n` +
-        `To add a new version, use: lcp version add --version ${version} --config <file>`
-    );
-  }
-
-  return versions[version] as Record<string, unknown>;
+  const version = result.value;
+  return {
+    id: version.id,
+    version: version.versionNumber,
+    metadata: version.metadata,
+    dependencies: version.dependencies || [],
+    createdAt: version.createdAt,
+    updatedAt: version.updatedAt,
+  };
 }
 
 export function createReadCommand(): Command {
@@ -105,15 +116,44 @@ Examples:
 
         // Output result
         if (cmdOptions.json) {
-          console.log(JSON.stringify(versionData, null, 2));
-        } else {
-          console.log(`Version: ${versionData['version']}`);
-          console.log(`Created: ${versionData['createdAt']}`);
-          console.log(`Updated: ${versionData['updatedAt']}`);
-          console.log(`Deployed: ${versionData['isDeployed'] ? 'Yes' : 'No'}`);
-          console.log('');
-          console.log('Configuration:');
-          console.log(JSON.stringify(versionData['config'], null, 2));
+          console.log(
+            JSON.stringify(
+              {
+                id: versionData.id,
+                version: versionData.version,
+                account: context.account,
+                team: context.team,
+                moniker: context.moniker,
+                metadata: versionData.metadata,
+                dependencies: versionData.dependencies,
+                createdAt: versionData.createdAt,
+                updatedAt: versionData.updatedAt,
+              },
+              null,
+              2
+            )
+          );
+        } else if (!cmdOptions.quiet) {
+          console.log(`Version: ${versionData.version}`);
+          console.log(`Application: ${context.moniker}`);
+          console.log(`Account: ${context.account}`);
+          console.log(`Team: ${context.team}`);
+          console.log(`Created: ${versionData.createdAt}`);
+          console.log(`Updated: ${versionData.updatedAt}`);
+
+          if (versionData.dependencies.length > 0) {
+            console.log('');
+            console.log('Dependencies:');
+            versionData.dependencies.forEach((dep) => {
+              console.log(`  - ${dep.type}: ${dep.name}`);
+            });
+          }
+
+          if (Object.keys(versionData.metadata).length > 0) {
+            console.log('');
+            console.log('Metadata:');
+            console.log(JSON.stringify(versionData.metadata, null, 2));
+          }
         }
       } catch (error) {
         if (cmdOptions.debug) {
